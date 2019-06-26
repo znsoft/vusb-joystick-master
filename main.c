@@ -15,7 +15,10 @@ Licensed under GPL v2 or later. See License.txt. */
 static uint8_t report [3]; // current
 static uint8_t report_out [3]; // last sent over USB
 static long Xpos = 0;
-
+static long Ypos = 0;
+int divider= 2;
+#define YPIN1 (PINC & 1<<PC3)
+#define YPIN2 (PINC & 1<<PC4)
 
 static void init_joy( void )
 {
@@ -27,24 +30,60 @@ static void init_joy( void )
 	PORTD |=  0x03;
 }
 
+
+int adc(uchar adctouse)
+{
+    int ADCval;
+
+    ADMUX = adctouse;         // use #1 ADC
+    ADMUX |= (1 << REFS0);    // use AVcc as the reference
+    ADMUX &= ~(1 << ADLAR);   // clear for 10 bit resolution
+
+    ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);    // 128 prescale for 8Mhz
+    ADCSRA |= (1 << ADEN);    // Enable the ADC
+
+    ADCSRA |= (1 << ADSC);    // Start the ADC conversion
+
+    while(ADCSRA & (1 << ADSC));      // Thanks T, this line waits for the ADC to finish 
+
+
+    ADCval = ADCL;
+    ADCval = (ADCH << 8) + ADCval;    // ADCH is read so ADC can be updated again
+
+    return ADCval;
+}
+
+
 static void read_joy( void )
 {
-	//report [0] = 0;
+	report [0] = 0;
 	//report [1] = 0;
 	//report [2] = 0;
 	
-	// Y
-	if ( ! (PINB & 0x04) ) report [0] = -127;
-	if ( ! (PINB & 0x08) ) report [0] = +127;
+	int8_t dx = encode_read1();
+	if(dx!=0){
+		Xpos +=(int)dx;
+		Xpos = Xpos / divider;
+		if(Xpos<127&&Xpos>-127)
+		report [0] = (int8_t)Xpos;
+			}
 	
-	// X
-//	if ( ! (PINB & 0x10) ) report [1] = -127;
-//	if ( ! (PINB & 0x20) ) report [1] = +127;
+	
+	Ypos = adc(YPIN1);
+	Ypos -=adc(YPIN2);
+	report [1] = (int8_t)(Ypos/8);
+
 	
 	// Buttons
 	if ( ! (PIND & 0x01) ) report [2] |= 0x01;
 	if ( ! (PIND & 0x02) ) report [2] |= 0x02;
+	//if ( ! (PIND & 0x04) ) report [2] |= 0x04;//USB pins
+	//if ( ! (PIND & 0x08) ) report [2] |= 0x08;
 	// ...
+	//	if ( ! (PIND & 0x01) ) report [2] |= 0x01;
+	//if ( ! (PIND & 0x02) ) report [2] |= 0x02;
+	//if ( ! (PIND & 0x04) ) report [2] |= 0x04;//USB pins
+	//if ( ! (PIND & 0x08) ) report [2] |= 0x08;
 }
 
 // X/Y joystick w/ 8-bit readings (-127 to +127), 8 digital buttons
@@ -116,12 +155,7 @@ encode_init();
 		if ( usbInterruptIsReady() )
 		{
 			read_joy();
-			int8_t dx = encode_read1();
-			if(dx!=0){
-				Xpos +=(int)dx;
-				if(Xpos<127&&Xpos>-127)
-				report [0] = (int8_t)Xpos;
-			}
+
 			
 			// Don't send update unless joystick changed
 			if ( memcmp( report_out, report, sizeof report ) )

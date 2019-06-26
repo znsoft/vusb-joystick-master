@@ -17,11 +17,11 @@
 // If you change these change encode_init(), too!
 #define PHASE_A     (PINC & 1<<PC1)
 #define PHASE_B     (PINC & 1<<PC2)
-#define KEY         (PINC & 1<<PC0)
+//#define KEY         (PINC & 1<<PC0)
 
 
 volatile int8_t enc_delta;      // -128 ... 127
-volatile uint8_t key_press;
+//volatile uint8_t key_press;
 static int8_t last;
 
 
@@ -30,8 +30,8 @@ void encode_init(void)
   int8_t new;
 
   // Make Phase A / B and key input and enable pull-ups
-  DDRC &= ~(_BV(PC1)) & ~(_BV(PC2)) & ~(_BV(PC0));
-  PORTC |= ~(_BV(PC1)) | ~(_BV(PC2)) | _BV(PC0);
+  DDRC &= ~(_BV(PC1)) & ~(_BV(PC2)) ;//& ~(_BV(PC0));
+  PORTC |= ~(_BV(PC1)) | ~(_BV(PC2));// | _BV(PC0);
 
   new = 0;
   if (PHASE_A)
@@ -41,7 +41,7 @@ void encode_init(void)
   last = new;                   // power on state
   enc_delta = 0;
 
-  key_press = 0;
+  //key_press = 0;
 
   TCCR2 = _BV(WGM21) | _BV(CS22);       // Timer 2: CTC, F_CPU / 64
   OCR2 = (uint8_t) (F_CPU / 64.0 * 1e-3 - 0.5);         // 1ms
@@ -51,7 +51,7 @@ void encode_init(void)
 ISR(TIMER2_COMP_vect)           // 1ms for manual movement
 {
   int8_t new, diff;
-  static uint8_t key_state = 0;
+  //static uint8_t key_state = 0;
 
   new = 0;
   if (PHASE_A)
@@ -65,13 +65,13 @@ ISR(TIMER2_COMP_vect)           // 1ms for manual movement
   }
 
   // shift new value in (debouncing)
-  key_state = (key_state << 1) | 0xe0;
-  if (KEY)
-    key_state |= 0x01;
+ ////// key_state = (key_state << 1) | 0xe0;
+ // if (KEY)
+ //   key_state |= 0x01;
 
   // if pressed four times (4 ms) it is be really pressed
-  if (key_state == 0xf0)
-    key_press = 1;
+ // if (key_state == 0xf0)
+  //  key_press = 1;
 }
 
 
