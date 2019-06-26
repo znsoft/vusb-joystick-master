@@ -59,3 +59,9 @@ V-USB implements a low-speed USB device in software. When connected, it tells th
 
 -- 
 Shay Green <gblargg@gmail.com>
+
+X Axis use rotary encoder
+3d Model source of steering wheel is https://cad.onshape.com/documents/df14523b20e410a4c80b0378/w/ab48d0370ba6b437f426b0d0/e/e431c43bfede7fcede368997
+
+
+
