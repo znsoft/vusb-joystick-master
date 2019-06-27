@@ -2,7 +2,7 @@
 
 Copyright (C) 2014 Shay Green
 Licensed under GPL v2 or later. See License.txt. */
-
+//#define USB_CFG_LONG_TRANSFERS	1
 #include <stdint.h>
 #include <string.h>
 #include <avr/io.h>
