@@ -16,18 +16,53 @@ static uint8_t report [3]; // current
 static uint8_t report_out [3]; // last sent over USB
 static long Xpos = 0;
 static long Ypos = 0;
-int divider= 2;
+static int divider= 2;
+static int multiplier= 1;
 #define YPIN1 (PINC & 1<<PC3)
 #define YPIN2 (PINC & 1<<PC4)
+//motor pin l298n
+#define MOTORPWMPIN (PINB & 1<<PB1)
+#define MOTORPIN1 (PINC & 1<<PC5)
+#define MOTORPIN2 (PINC & 1<<PC6)
+//motor controll l298n
+#define PWM(x) OCR1A=x 
+#define MOTOROFF PORTB &= ~MOTORPWMPIN 
+#define MOTORON PORTB &= PORTB |=  MOTORPWMPIN 
+#define MOTORCCW PORTC &= ~MOTORPIN1;PORTC |= MOTORPIN2 
+#define MOTORCW PORTC &= ~MOTORPIN2;PORTC |= MOTORPIN1 
+
+
+//Програма инициализации ШИМ
+static void init_pwm (void)
+{
+  DDRB  |=  MOTORPWMPIN;
+  MOTOROFF;
+  TCCR1A=(1<<COM1A1)|(1<<WGM10); //На выводе OC1A единица, когда OCR1A==TCNT1, восьмибитный ШИМ
+  TCCR1B=(1<<CS10);		 //Делитель= /1
+  PWM(0x00);			//Начальная Мощность нулевая
+}
+
+static void init_motor(void){
+	init_pwm ();
+
+	DDRC  |= MOTORPIN1;
+	DDRC  |= MOTORPIN2;
+	MOTORCCW;
+}
+
+
+
 
 static void init_joy( void )
 {
 	// Configure as inputs with pull-ups
-	DDRB  &= ~0x3c;
-	PORTB |=  0x3c;
+	DDRB  &= ~0xFc;
+	PORTB |=  0xFc;
 	
-	DDRD  &= ~0x03;
-	PORTD |=  0x03;
+	DDRD  &= ~0xF3;
+	PORTD |=  0xF3;
+	
+
 }
 
 
@@ -56,16 +91,20 @@ int adc(uchar adctouse)
 
 static void read_joy( void )
 {
-	report [0] = 0;
+	//report [0] = 0;
 	//report [1] = 0;
-	//report [2] = 0;
+	report [2] = 0;
 	
 	int8_t dx = encode_read1();
 	if(dx!=0){
 		Xpos +=(int)dx;
-		Xpos = Xpos / divider;
-		if(Xpos<127&&Xpos>-127)
+		Xpos = (multiplier * Xpos) / divider;
+		if(Xpos<127&&Xpos>-127){
 		report [0] = (int8_t)Xpos;
+		PWM(0x00);MOTOROFF;
+		}
+		if(Xpos<-127){MOTORON;MOTORCW;PWM(0xFF);}
+		if(Xpos>127){MOTORON;MOTORCCW;PWM(0xFF);}
 			}
 	
 	
@@ -77,13 +116,23 @@ static void read_joy( void )
 	// Buttons
 	if ( ! (PIND & 0x01) ) report [2] |= 0x01;
 	if ( ! (PIND & 0x02) ) report [2] |= 0x02;
-	//if ( ! (PIND & 0x04) ) report [2] |= 0x04;//USB pins
-	//if ( ! (PIND & 0x08) ) report [2] |= 0x08;
+	if ( ! (PINB & 0x01) ) report [2] |= 0x04;
+	if ( ! (PINB & 0x04) ) report [2] |= 0x08;
 	// ...
-	//	if ( ! (PIND & 0x01) ) report [2] |= 0x01;
-	//if ( ! (PIND & 0x02) ) report [2] |= 0x02;
-	//if ( ! (PIND & 0x04) ) report [2] |= 0x04;//USB pins
-	//if ( ! (PIND & 0x08) ) report [2] |= 0x08;
+	if ( ! (PIND & 0x10) ) report [2] |= 0x10;
+	if ( ! (PIND & 0x20) ) report [2] |= 0x20;
+	if ( ! (PIND & 0x40) ) report [2] |= 0x40;
+	if ( ! (PIND & 0x80) ) report [2] |= 0x80;
+	
+	
+	
+	if(encode_readKey()==1){
+	//divider++;
+		divider = 1+(divider&3);
+		multiplier = divider-1;
+		if(multiplier<1)multiplier=1;
+   
+   }
 }
 
 // X/Y joystick w/ 8-bit readings (-127 to +127), 8 digital buttons
@@ -132,19 +181,17 @@ uint8_t usbFunctionSetup( uint8_t data [8] )
 	}
 }
 
-static void toggle_led( void )
-{
-	DDRC  |= 1;
-	PORTC ^= 1;
-}
+
 
 int main( void )
 {
-encode_init();
+	encode_init();
 	usbInit();
 	sei();
 	
 	init_joy();
+	
+	init_motor();
 	
 	for ( ;; )
 	{
@@ -162,7 +209,7 @@ encode_init();
 			{
 				memcpy( report_out, report, sizeof report );
 				usbSetInterrupt( report_out, sizeof report_out );
-				toggle_led();
+				//toggle_led();
 			}
 		}
 	}
