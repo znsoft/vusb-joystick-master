@@ -3,6 +3,7 @@
 Copyright (C) 2014 Shay Green
 Licensed under GPL v2 or later. See License.txt. */
 //#define USB_CFG_LONG_TRANSFERS	1
+//#define USE_FORCEFEEDBACK 1
 #include <stdint.h>
 #include <string.h>
 #include <avr/io.h>
@@ -101,10 +102,14 @@ static void read_joy( void )
 		Xpos = (multiplier * Xpos) / divider;
 		if(Xpos<127&&Xpos>-127){
 		report [0] = (int8_t)Xpos;
+		#ifdef USE_FORCEFEEDBACK
 		PWM(0x00);MOTOROFF;
+		#endif
 		}
+		#ifdef USE_FORCEFEEDBACK
 		if(Xpos<-127){MOTORON;MOTORCW;PWM(0xFF);}
 		if(Xpos>127){MOTORON;MOTORCCW;PWM(0xFF);}
+		#endif
 			}
 	
 	
@@ -190,9 +195,9 @@ int main( void )
 	sei();
 	
 	init_joy();
-	
+	#ifdef USE_FORCEFEEDBACK
 	init_motor();
-	
+	#endif
 	for ( ;; )
 	{
 		usbPoll();
