@@ -3,7 +3,9 @@
 Copyright (C) 2014 Shay Green
 Licensed under GPL v2 or later. See License.txt. */
 //#define USB_CFG_LONG_TRANSFERS	1
-//#define USE_FORCEFEEDBACK 1
+
+#define USE_FORCEFEEDBACK 1
+//#define USE_YPOS 1
 #include <stdint.h>
 #include <string.h>
 #include <avr/io.h>
@@ -19,18 +21,28 @@ static long Xpos = 0;
 static long Ypos = 0;
 static int divider= 2;
 static int multiplier= 1;
-#define YPIN1 (PINC & 1<<PC3)
-#define YPIN2 (PINC & 1<<PC4)
+#define YPIN1 ( 1<<PC3)
+#define YPIN2 ( 1<<PC0)
+#define BUTTON0 (_BV(0))
+#define BUTTON1 (_BV(1))
+#define BUTTON2 (_BV(2))
+#define BUTTON3 (_BV(3))
+#define BUTTON4 (_BV(4))
+#define BUTTON5 (_BV(5))
+#define BUTTON6 (_BV(6))
+#define BUTTON7 (_BV(7))
+
+
 //motor pin l298n
-#define MOTORPWMPIN (PINB & 1<<PB1)
-#define MOTORPIN1 (PINC & 1<<PC5)
-#define MOTORPIN2 (PINC & 1<<PC6)
+#define MOTORPWMPIN ( _BV(1))
+#define MOTORPIN1 ( _BV(5))
+#define MOTORPIN2 ( _BV(6))
 //motor controll l298n
 #define PWM(x) OCR1A=x 
 #define MOTOROFF PORTB &= ~MOTORPWMPIN 
-#define MOTORON PORTB &= PORTB |=  MOTORPWMPIN 
-#define MOTORCCW PORTC &= ~MOTORPIN1;PORTC |= MOTORPIN2 
-#define MOTORCW PORTC &= ~MOTORPIN2;PORTC |= MOTORPIN1 
+#define MOTORON  PORTB |=  MOTORPWMPIN 
+#define MOTORCCW PORTD &= ~MOTORPIN1;PORTD |= MOTORPIN2 
+#define MOTORCW  PORTD &= ~MOTORPIN2;PORTD |= MOTORPIN1 
 
 
 //Програма инициализации ШИМ
@@ -46,8 +58,8 @@ static void init_pwm (void)
 static void init_motor(void){
 	init_pwm ();
 
-	DDRC  |= MOTORPIN1;
-	DDRC  |= MOTORPIN2;
+	DDRD  |= MOTORPIN1;
+	DDRD  |= MOTORPIN2;
 	MOTORCCW;
 }
 
@@ -56,12 +68,7 @@ static void init_motor(void){
 
 static void init_joy( void )
 {
-	// Configure as inputs with pull-ups
-	DDRB  &= ~0xFc;
-	PORTB |=  0xFc;
-	
-	DDRD  &= ~0xF3;
-	PORTD |=  0xF3;
+
 	
 
 }
@@ -90,6 +97,7 @@ int adc(uchar adctouse)
 }
 
 
+
 static void read_joy( void )
 {
 	//report [0] = 0;
@@ -99,45 +107,45 @@ static void read_joy( void )
 	int8_t dx = encode_read1();
 	if(dx!=0){
 		Xpos +=(int)dx;
-		Xpos = (multiplier * Xpos) / divider;
-		if(Xpos<127&&Xpos>-127){
-		report [0] = (int8_t)Xpos;
+		int Xp = (multiplier * Xpos) / divider;
+
+		if(Xp<127&&Xp>-127){
+		report [0] = (int8_t)Xp;
 		#ifdef USE_FORCEFEEDBACK
 		PWM(0x00);MOTOROFF;
 		#endif
 		}
 		#ifdef USE_FORCEFEEDBACK
-		if(Xpos<-127){MOTORON;MOTORCW;PWM(0xFF);}
-		if(Xpos>127){MOTORON;MOTORCCW;PWM(0xFF);}
+		if(Xp<-127){MOTORON;MOTORCW;PWM(0xFF);}
+		if(Xp>127){MOTORON;MOTORCCW;PWM(0xFF);}
 		#endif
 			}
 	
 	
 	Ypos = adc(YPIN1);
 	Ypos -=adc(YPIN2);
+	#ifdef USE_YPOS
 	report [1] = (int8_t)(Ypos/8);
-
+	#endif
 	
 	// Buttons
-	if ( ! (PIND & 0x01) ) report [2] |= 0x01;
-	if ( ! (PIND & 0x02) ) report [2] |= 0x02;
-	if ( ! (PINB & 0x01) ) report [2] |= 0x04;
-	if ( ! (PINB & 0x04) ) report [2] |= 0x08;
-	// ...
-	if ( ! (PIND & 0x10) ) report [2] |= 0x10;
-	if ( ! (PIND & 0x20) ) report [2] |= 0x20;
-	if ( ! (PIND & 0x40) ) report [2] |= 0x40;
-	if ( ! (PIND & 0x80) ) report [2] |= 0x80;
+
+	//if ( ! (PINB & 0x01) ) report [2] |= 0x04;
+	//if ( ! (PINB & 0x04) ) report [2] |= 0x08;
+
 	
 	
 	
-	if(encode_readKey()==1){
-	//divider++;
-		divider = 1+(divider&3);
-		multiplier = divider-1;
-		if(multiplier<1)multiplier=1;
-   
-   }
+	/*
+	 if(encode_readKey()==1){
+	
+	 	divider = 1+(divider&3);
+	 	multiplier = divider-1;
+	 	if(multiplier<1)multiplier=1;
+    
+    }
+	 */
+
 }
 
 // X/Y joystick w/ 8-bit readings (-127 to +127), 8 digital buttons
