@@ -26,4 +26,4 @@ int8_t encode_read2(void);
  */
 int8_t encode_read4(void);
 
-int8_t encode_readKey(void);
+void calcEncode(void);

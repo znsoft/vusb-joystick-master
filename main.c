@@ -4,8 +4,9 @@ Copyright (C) 2014 Shay Green
 Licensed under GPL v2 or later. See License.txt. */
 //#define USB_CFG_LONG_TRANSFERS	1
 
-#define USE_FORCEFEEDBACK 1
+//#define USE_FORCEFEEDBACK 1
 //#define USE_YPOS 1
+#define USE_XPOS 1
 #include <stdint.h>
 #include <string.h>
 #include <avr/io.h>
@@ -19,7 +20,7 @@ static uint8_t report [3]; // current
 static uint8_t report_out [3]; // last sent over USB
 static long Xpos = 0;
 static long Ypos = 0;
-static int divider= 2;
+static int divider= 1;
 static int multiplier= 1;
 #define YPIN1 ( 1<<PC3)
 #define YPIN2 ( 1<<PC0)
@@ -34,13 +35,13 @@ static int multiplier= 1;
 
 
 //motor pin l298n
-#define MOTORPWMPIN ( _BV(1))
+#define MOTORPWMPIN ( _BV(6))
 #define MOTORPIN1 ( _BV(5))
-#define MOTORPIN2 ( _BV(6))
+#define MOTORPIN2 ( _BV(7))
 //motor controll l298n
-#define PWM(x) OCR1A=x 
-#define MOTOROFF PORTB &= ~MOTORPWMPIN 
-#define MOTORON  PORTB |=  MOTORPWMPIN 
+#define PWM(x) OCR2A=x 
+#define MOTOROFF PORTD &= ~MOTORPWMPIN 
+#define MOTORON  PORTD |=  MOTORPWMPIN 
 #define MOTORCCW PORTD &= ~MOTORPIN1;PORTD |= MOTORPIN2 
 #define MOTORCW  PORTD &= ~MOTORPIN2;PORTD |= MOTORPIN1 
 
@@ -48,11 +49,27 @@ static int multiplier= 1;
 //Програма инициализации ШИМ
 static void init_pwm (void)
 {
-  DDRB  |=  MOTORPWMPIN;
+
+DDRD |= MOTORPWMPIN;
+    // PD6 is now an output
+
+    PWM(0x00);			//Начальная Мощность нулевая
+
+
+    TCCR2A |= (1 << COM2A1);
+    // set none-inverting mode
+
+    TCCR2A |= (1 << WGM21) | (1 << WGM20);
+    // set fast PWM Mode
+
+    TCCR2B |= (1 << CS21);
+    // set prescaler to 8 and starts PWM
+
+  
   MOTOROFF;
-  TCCR1A=(1<<COM1A1)|(1<<WGM10); //На выводе OC1A единица, когда OCR1A==TCNT1, восьмибитный ШИМ
-  TCCR1B=(1<<CS10);		 //Делитель= /1
-  PWM(0x00);			//Начальная Мощность нулевая
+ // TCCR1A=(1<<COM1A1)|(1<<WGM10); //На выводе OC1A единица, когда OCR1A==TCNT1, восьмибитный ШИМ
+ // TCCR1B=(1<<CS10);		 //Делитель= /1
+
 }
 
 static void init_motor(void){
@@ -103,8 +120,10 @@ static void read_joy( void )
 	//report [0] = 0;
 	//report [1] = 0;
 	report [2] = 0;
+	//calcEncode();
 	
 	int8_t dx = encode_read1();
+	//report [0] = dx;
 	if(dx!=0){
 		Xpos +=(int)dx;
 		int Xp = (multiplier * Xpos) / divider;
@@ -121,10 +140,10 @@ static void read_joy( void )
 		#endif
 			}
 	
-	
+	#ifdef USE_YPOS
 	Ypos = adc(YPIN1);
 	Ypos -=adc(YPIN2);
-	#ifdef USE_YPOS
+	
 	report [1] = (int8_t)(Ypos/8);
 	#endif
 	
