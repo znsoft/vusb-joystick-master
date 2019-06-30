@@ -32,7 +32,8 @@ void encode_init(void)
 
   // Make Phase A / B  input 
   DDRB &= ~(PIN_A) & ~(PIN_B) ;
-  PORTB &= ~(PIN_A) & ~(PIN_B) ;
+//  PORTB &= ~(PIN_A) & ~(PIN_B) ;
+  PORTB |= (PIN_A) | (PIN_B) ;
 
   new = 0;
   if (PHASE_A)
@@ -45,52 +46,43 @@ void encode_init(void)
 
 //#ifdef USE_XPOS
 
-    PCICR |= (1 << PCIE0);    // set PCIE0 to enable PCMSK0 scan PortB
-    PCMSK0 |= (1 << PIN_A)|(1 << PIN_B);  // set PCINT to trigger an interrupt on state change 
+  //  PCICR |= (1 << PCIE0);    // set PCIE0 to enable PCMSK0 scan PortB
+  //  PCMSK0 |= (1 << PIN_A)|(1 << PIN_B);  // set PCINT to trigger an interrupt on state change 
 //#endif
 
 // Set the Timer Mode to CTC
-  //  TCCR0A |= (1 << WGM01);
+    TCCR0A |= (1 << WGM01);
 
     // Set the value that you want to count to
-  //  OCR0A = 0xF9;
+    OCR0A = (uint8_t) (F_CPU / 64.0 * 1e-3 - 0.5);
 
-    //TIMSK0 |= (1 << OCIE0A);    //Set the ISR COMPA vect
+    TIMSK0 |= (1 << OCIE0A);    //Set the ISR COMPA vect
+sei();
 
-
-   // TCCR0B |= (1 << CS01);
+    TCCR0B |= (1 << CS01)|(1 << CS00);
     // set prescaler to 8 and start the timer
+	
+//atmega8
+//	TCCR2 = _BV(WGM21) | _BV(CS22);       // Timer 2: CTC, F_CPU / 64
+//  OCR2 = (uint8_t) (F_CPU / 64.0 * 1e-3 - 0.5);         // 1ms
+//  TIMSK |= _BV(OCIE2);
+
 
 
 }
 
-ISR (PCINT0_vect)
-//#ifdef USE_XPOS
-// 0,1,2,3
-//ISR (TIMER0_COMPA_vect)
+//ISR (PCINT0_vect)
+ISR (TIMER0_COMPA_vect)
+
 {
-   int8_t new, diff=0;
-  
- new = 0;
-  if (PHASE_A)    new = 1;
-  if (PHASE_B)    new |= 2;
-  
-
-if(last == 0&&new==1)diff = 1;
-if(last == 0&&new==2)diff =-1;
-if(last == 3&&new==1)diff =-1;
-if(last == 3&&new==2)diff =1;
-
-enc_delta += diff;
-    last = new;                 // store new as next last
-return;
-                 // convert gray to binary
+  int8_t new, diff;
+  new = 0;
+  if (PHASE_B)    new = 3;
+  if (PHASE_A)    new ^=1;
   diff = last - new;            // difference last - new
   if (diff & 1) {               // bit 0 = value (1)
     last = new;                 // store new as next last
     enc_delta += (diff & 2) - 1;        // bit 1 = direction (+/-)
-  
-	//enc_delta = 1;
   }
 }
 //#endif
@@ -107,10 +99,7 @@ return;
   if (diff != 0) {               // bit 0 = value (1)
     last = new;                 // store new as next last
     enc_delta += (diff & 2) - 1;        // bit 1 = direction (+/-)
-	enc_delta = 1;
   }
-//enc_delta = new;
-
 }
 
 int8_t encode_read1(void)       // read single step encoders

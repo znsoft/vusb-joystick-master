@@ -4,8 +4,8 @@ Copyright (C) 2014 Shay Green
 Licensed under GPL v2 or later. See License.txt. */
 //#define USB_CFG_LONG_TRANSFERS	1
 
-//#define USE_FORCEFEEDBACK 1
-//#define USE_YPOS 1
+#define USE_FORCEFEEDBACK 1
+#define USE_YPOS 1
 #define USE_XPOS 1
 #include <stdint.h>
 #include <string.h>
@@ -22,8 +22,9 @@ static long Xpos = 0;
 static long Ypos = 0;
 static int divider= 1;
 static int multiplier= 1;
-#define YPIN1 ( 1<<PC3)
-#define YPIN2 ( 1<<PC0)
+volatile int8_t adc; 
+#define YPIN1 ( 1<<PC5)
+
 #define BUTTON0 (_BV(0))
 #define BUTTON1 (_BV(1))
 #define BUTTON2 (_BV(2))
@@ -82,6 +83,29 @@ static void init_motor(void){
 
 
 
+int startadc(uchar adctouse)
+{
+    
+
+    ADMUX = adctouse;         // use #1 ADC
+    ADMUX |= (1 << REFS0);    // use AVcc as the reference
+    ADMUX &= ~(1 << ADLAR);   // clear for 10 bit resolution
+
+    ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);    // 128 prescale for 8Mhz
+    ADCSRA |= (1 << ADEN);    // Enable the ADC
+    ADCSRA |= _BV(ADIE);
+    ADCSRA |= (1 << ADSC);    // Start the ADC conversion
+	ADCSRA |= _BV(ADSC); // starts conversion
+}
+
+ISR(ADC_vect) //подпрограмма обработки прерывания от АЦП
+{
+	int ADCval;
+	ADCval = ADCL;
+    ADCval = (ADCH << 8) + ADCval; 
+	adc=ADCval>>2; //считываем значение с АЦП и преобразуем его в значение от 0 до 8
+	ADCSRA |= _BV(ADSC); // starts conversion
+}
 
 static void init_joy( void )
 {
@@ -91,7 +115,7 @@ static void init_joy( void )
 }
 
 
-int adc(uchar adctouse)
+int _adc(uchar adctouse)
 {
     int ADCval;
 
@@ -135,16 +159,15 @@ static void read_joy( void )
 		#endif
 		}
 		#ifdef USE_FORCEFEEDBACK
-		if(Xp<-127){MOTORON;MOTORCW;PWM(0xFF);}
-		if(Xp>127){MOTORON;MOTORCCW;PWM(0xFF);}
+		if(Xp<-127){MOTORON;MOTORCW;PWM(-(Xp+127)*64);}
+		if(Xp>127){MOTORON;MOTORCCW;PWM((Xp-127)*64);}
 		#endif
 			}
 	
 	#ifdef USE_YPOS
-	Ypos = adc(YPIN1);
-	Ypos -=adc(YPIN2);
-	
-	report [1] = (int8_t)(Ypos/8);
+	Ypos = adc;
+
+	report [1] = (int8_t)(Ypos);
 	#endif
 	
 	// Buttons
@@ -218,6 +241,7 @@ uint8_t usbFunctionSetup( uint8_t data [8] )
 int main( void )
 {
 	encode_init();
+	startadc(YPIN1);
 	usbInit();
 	sei();
 	
