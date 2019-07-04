@@ -20,10 +20,10 @@ static uint8_t report [3]; // current
 static uint8_t report_out [3]; // last sent over USB
 static long Xpos = 0;
 static long Ypos = 0;
-static int divider= 1;
+static int divider= 2;
 static int multiplier= 1;
 volatile int8_t adc; 
-#define YPIN1 ( 1<<PC5)
+#define YPIN1 PC5
 
 #define BUTTON0 (_BV(0))
 #define BUTTON1 (_BV(1))
@@ -83,18 +83,17 @@ static void init_motor(void){
 
 
 
-int startadc(uchar adctouse)
+void startadc(uchar adctouse)
 {
-    
 
-    ADMUX = adctouse;         // use #1 ADC
-    ADMUX |= (1 << REFS0);    // use AVcc as the reference
-    ADMUX &= ~(1 << ADLAR);   // clear for 10 bit resolution
-
-    ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0);    // 128 prescale for 8Mhz
-    ADCSRA |= (1 << ADEN);    // Enable the ADC
+	ADMUX	&=	0xf0;
+    ADMUX |= adctouse;         // use #1 ADC
+    ADMUX |= _BV(REFS0);    // use AVcc as the reference
+    ADMUX &= ~_BV( ADLAR);   // clear for 10 bit resolution
+    ADCSRA |= _BV( ADPS2) | _BV( ADPS1) | _BV( ADPS0);    // 128 prescale for 8Mhz
+    ADCSRA |= _BV( ADEN);    // Enable the ADC
     ADCSRA |= _BV(ADIE);
-    ADCSRA |= (1 << ADSC);    // Start the ADC conversion
+
 	ADCSRA |= _BV(ADSC); // starts conversion
 }
 
@@ -159,13 +158,13 @@ static void read_joy( void )
 		#endif
 		}
 		#ifdef USE_FORCEFEEDBACK
-		if(Xp<-127){MOTORON;MOTORCW;PWM(-(Xp+127)*64);}
-		if(Xp>127){MOTORON;MOTORCCW;PWM((Xp-127)*64);}
+		if(Xp<-127){MOTORON;MOTORCW;PWM(-(Xp+127)*48);}
+		if(Xp>127){MOTORON;MOTORCCW;PWM((Xp-127)*48);}
 		#endif
 			}
 	
 	#ifdef USE_YPOS
-	Ypos = adc;
+	Ypos = adc-126;
 
 	report [1] = (int8_t)(Ypos);
 	#endif
@@ -190,7 +189,7 @@ static void read_joy( void )
 
 }
 
-// X/Y joystick w/ 8-bit readings (-127 to +127), 8 digital buttons
+// X/Y joystick w/ 8-bit readings (-127 to +127), 8 digital buttons 42 bytes+28
 PROGMEM const char usbHidReportDescriptor [USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = {
 	0x05, 0x01,     // USAGE_PAGE (Generic Desktop)
 	0x09, 0x05,     // USAGE (Game Pad)
@@ -205,6 +204,10 @@ PROGMEM const char usbHidReportDescriptor [USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH]
 	0x95, 0x02,     //   REPORT_COUNT (2)
 	0x81, 0x02,     //   INPUT (Data,Var,Abs)
 	0xc0,           // END_COLLECTION
+	
+
+	
+	
 	0x05, 0x09,     // USAGE_PAGE (Button)
 	0x19, 0x01,     //   USAGE_MINIMUM (Button 1)
 	0x29, 0x08,     //   USAGE_MAXIMUM (Button 8)
@@ -213,8 +216,34 @@ PROGMEM const char usbHidReportDescriptor [USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH]
 	0x75, 0x01,     // REPORT_SIZE (1)
 	0x95, 0x08,     // REPORT_COUNT (8)
 	0x81, 0x02,     // INPUT (Data,Var,Abs)
-	0xc0            // END_COLLECTION
+	0xc0 /*,           // END_COLLECTION	
+	
+	
+	
+	0x09,0x66, // USAGE (Download Force Sample)
+	0xA1,0x02, // COLLECTION (Logical)
+	0x85,0x08, // REPORT_ID (08)
+	0x05,0x01, // USAGE_PAGE (Generic Desktop)
+	0x09,0x30, // USAGE (X)
+	0x09,0x31, // USAGE (Y)
+	0x15,0x81, // LOGICAL_MINIMUM (-127)
+	0x25,0x7F, // LOGICAL_MAXIMUM (127)
+	0x35,0x00, // PHYSICAL_MINIMUM (00)
+	0x46,0xFF,0x00, // PHYSICAL_MAXIMUM (255)
+	0x75,0x08, // REPORT_SIZE (08)
+	0x95,0x02, // REPORT_COUNT (02)
+	0x91,0x02, // OUTPUT (Data,Var,Abs)
+	0xC0, // END COLLECTION ()
+	*/
+	
+	
+	
+	
 };
+
+
+static uchar    idleRate;           /* in 4 ms units */
+char _awaitReport;
 
 uint8_t usbFunctionSetup( uint8_t data [8] )
 {
@@ -229,13 +258,29 @@ uint8_t usbFunctionSetup( uint8_t data [8] )
 		usbMsgPtr = (usbMsgPtr_t) report_out;
 		return sizeof report_out;
 	
-	//case USBRQ_HID_SET_REPORT: // LEDs on joystick?
+	case USBRQ_HID_SET_REPORT: // LEDs on joystick?
 	
+	 _awaitReport = 1;
+		return USB_NO_MSG;
 	default:
 		return 0;
 	}
+	
+	
+
+	
 }
 
+
+uchar   usbFunctionWrite(uchar *data, uchar len)
+{
+   if (!_awaitReport || len < 1)
+      return 1;
+   if(data[0]<127){MOTORON;MOTORCCW;PWM((data[0]));} ;
+   if(data[0]>127){MOTORON;MOTORCW;PWM(127-(data[0]));} ;
+   _awaitReport = 0;
+    return 1;
+}
 
 
 int main( void )
