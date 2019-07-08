@@ -50,6 +50,10 @@ PROGMEM const char usbHidReportDescriptor [] = {
 
 
 // X/Y joystick w/ 8-bit readings (-127 to +127), 8 digital buttons 42 bytes+19  USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH
+#define ReportIndex 0
+#define ReportNumber 1
+#define Xindex ReportIndex+2
+#define Yindex ReportIndex+1
 
 PROGMEM const char usbHidReportDescriptor [] = {
 
@@ -57,22 +61,26 @@ PROGMEM const char usbHidReportDescriptor [] = {
 0x15, 0x00,        // Logical Minimum (0)
 0x09, 0x04,        // Usage (Joystick)
 0xA1, 0x01,        // Collection (Application)
+
 0x85, 0x01,        //   Report ID (1)
 0x05, 0x02,        //   Usage Page (Sim Ctrls)
-0x09, 0xBB,        //   Usage (Throttle)
+0x09, 0xBB,        //   Usage (Throttle)  //  0
 0x15, 0x81,        //   Logical Minimum (-127)
 0x25, 0x7F,        //   Logical Maximum (127)
 0x75, 0x08,        //   Report Size (8)
-0x95, 0x01,        //   Report Count (1)
+0x95, 0x01,        //   Report Count (1)  // 0
 0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
 0x05, 0x01,        //   Usage Page (Generic Desktop Ctrls)
 0x09, 0x01,        //   Usage (Pointer)
 0xA1, 0x00,        //   Collection (Physical)
-0x09, 0x30,        //     Usage (X)
-0x09, 0x31,        //     Usage (Y)
+0x09, 0x30,        //     Usage (X)      //1
+0x09, 0x31,        //     Usage (Y)      //2
 0x95, 0x02,        //     Report Count (2)
 0x81, 0x02,        //     Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
 0xC0,              //   End Collection
+
+
+
 0x09, 0x39,        //   Usage (Hat switch)
 0x15, 0x00,        //   Logical Minimum (0)
 0x25, 0x03,        //   Logical Maximum (3)
@@ -80,18 +88,21 @@ PROGMEM const char usbHidReportDescriptor [] = {
 0x46, 0x0E, 0x01,  //   Physical Maximum (270)
 0x66, 0x14, 0x00,  //   Unit (System: English Rotation, Length: Centimeter)
 0x75, 0x04,        //   Report Size (4)
-0x95, 0x01,        //   Report Count (1)
+0x95, 0x01,        //   Report Count (1) //3
 0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
 0x45, 0x00,        //   Physical Maximum (0)
 0x66, 0x00, 0x00,  //   Unit (None)
+
+
 0x05, 0x09,        //   Usage Page (Button)
 0x19, 0x01,        //   Usage Minimum (0x01)
 0x29, 0x04,        //   Usage Maximum (0x04)
 0x25, 0x01,        //   Logical Maximum (1)
 0x95, 0x04,        //   Report Count (4)
-0x75, 0x01,        //   Report Size (1)
+0x75, 0x01,        //   Report Size (1)   //4
 0x35, 0x00,        //   Physical Minimum (0)
 0x81, 0x02,        //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+
 0x05, 0x0F,        //   Usage Page (PID Page)
 0x09, 0x21,        //   Usage (0x21)
 0xA1, 0x02,        //   Collection (Logical)
@@ -483,8 +494,8 @@ PROGMEM const char usbHidReportDescriptor [] = {
 
 //#define USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH sizeof(usbHidReportDescriptor)
 
-#define reportLen 3
-// Report format: Y, X, buttons (up to 8)
+#define reportLen 5
+// Report format: Thrott, X, Y, hat pos, buttons (up to 8)
 static uint8_t report [reportLen]; // current
 static uint8_t report_out [reportLen]; // last sent over USB
 
@@ -608,12 +619,16 @@ int _adc(uchar adctouse)
 }
 
 
+//#define ReportIndex 0
+//#define ReportNumber 1
+//#define Xindex ReportIndex+2
+//#define Yindex ReportIndex+1
 
 static void read_joy( void )
 {
-	//report [0] = 0;
+	report [ReportIndex] = ReportNumber;
 	//report [1] = 0;
-	report [2] = 0;
+	//report [2] = 0;
 	//calcEncode();
 	
 	int8_t dx = encode_read1();
@@ -623,7 +638,7 @@ static void read_joy( void )
 		int Xp = (multiplier * Xpos) / divider;
 
 		if(Xp<127&&Xp>-127){
-		report [0] = (int8_t)Xp;
+		report [Xindex] = (int8_t)Xp;
 		#ifdef USE_FORCEFEEDBACK
 		PWM(0x00);MOTOROFF;
 		#endif
@@ -637,7 +652,7 @@ static void read_joy( void )
 	#ifdef USE_YPOS
 	Ypos = 127 - adc;
 
-	report [1] = (int8_t)(Ypos);
+	report [Yindex] = (int8_t)(Ypos);
 	#endif
 	
 	// Buttons
