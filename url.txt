@@ -1,0 +1,2 @@
+scheme     https://easyeda.com/editor#id=6b34220fd7234d4d8ea3180ff854eb6a
+3d model   https://cad.onshape.com/documents/df14523b20e410a4c80b0378/w/ab48d0370ba6b437f426b0d0/e/e431c43bfede7fcede368997
