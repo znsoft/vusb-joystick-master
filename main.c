@@ -5,9 +5,6 @@ Licensed under GPL v2 or later. See License.txt. */
 //#define USB_CFG_LONG_TRANSFERS	1
 //#define USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH 42
 
-
-
-
 #define USE_FORCEFEEDBACK 1
 #define USE_YPOS 1
 #define USE_XPOS 1
@@ -21,39 +18,21 @@ Licensed under GPL v2 or later. See License.txt. */
 #include "rotary.h"
 
 
-/*  first ver work
-PROGMEM const char usbHidReportDescriptor [] = {
-	0x05, 0x01,     // USAGE_PAGE (Generic Desktop)
-	0x09, 0x05,     // USAGE (Game Pad)
-	0xa1, 0x01,     // COLLECTION (Application)
-	 0x09, 0x01,     //   USAGE (Pointer)
-	 0xa1, 0x00,     //   COLLECTION (Physical)
-	  0x09, 0x30,     //     USAGE (X)
-	  0x09, 0x31,     //     USAGE (Y)               
-	  0x15, 0x81,     //   LOGICAL_MINIMUM (-127)
-	  0x25, 0x7f,     //   LOGICAL_MAXIMUM (127)
-	  0x75, 0x08,     //   REPORT_SIZE (8)
-	  0x95, 0x02,     //   REPORT_COUNT (2)
-	  0x81, 0x02,     //   INPUT (Data,Var,Abs)
-	 0xc0,           // END_COLLECTION 
 
-	
-	 0x05, 0x09,     // USAGE_PAGE (Button)
-	 0x19, 0x01,     //   USAGE_MINIMUM (Button 1)
-	 0x29, 0x08,     //   USAGE_MAXIMUM (Button 8)
-	 0x15, 0x00,     //   LOGICAL_MINIMUM (0)
-	 0x25, 0x01,     //   LOGICAL_MAXIMUM (1)
-	 0x75, 0x01,     // REPORT_SIZE (1)
-	 0x95, 0x08,     // REPORT_COUNT (8)
-	 0x81, 0x02,     // INPUT (Data,Var,Abs)   // 16 bytes
-	0xc0 ,           // END_COLLECTION	42 bytes */
+#define HX_PORT PORTB
+#define HX_DDR  DDRB
+#define HX_PIN  PINB
+
+#define HXdata 2
+#define HXsck 3
 
 
 // X/Y joystick w/ 8-bit readings (-127 to +127), 8 digital buttons 42 bytes+19  USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH
 #define ReportIndex 0
 #define ReportNumber 1
+#define Tindex ReportIndex+1
 #define Xindex ReportIndex+2
-#define Yindex ReportIndex+1
+#define Yindex ReportIndex+3
 
 PROGMEM const char usbHidReportDescriptor [] = {
 
@@ -494,11 +473,14 @@ PROGMEM const char usbHidReportDescriptor [] = {
 
 //#define USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH sizeof(usbHidReportDescriptor)
 
+
 #define reportLen 5
 // Report format: Thrott, X, Y, hat pos, buttons (up to 8)
 static uint8_t report [reportLen]; // current
 static uint8_t report_out [reportLen]; // last sent over USB
-
+static uint8_t ureport [100]; 
+//результат взвешивания
+static int32_t adc_value = 0;
 static long Xpos = 0;
 static long Ypos = 0;
 static int divider= 2;
@@ -619,6 +601,58 @@ int _adc(uchar adctouse)
 }
 
 
+
+
+
+
+
+void HX711_Init(void)
+{   
+	//sck выход, data - вход
+	HX_DDR |= (1<<HXsck);
+	HX_DDR &= ~(1<<HXdata);
+	
+	//подтягиваем data к питанию, на sck устанавливаем лог.единицу
+	HX_PORT |= (1<<HXdata);
+	HX_PORT &= ~(1<<HXsck);
+	HX_PORT &= ~(1<<HXsck);
+}
+
+
+void Weighing(void)
+{
+	uint8_t i = 0;
+
+	//ждём пока закончится преобразование
+	if(HX_PIN & (1<<HXdata))return;
+	
+	
+	adc_value = 0;	
+	for(i=0; i<24; i++)
+	{
+		//поднимаем строб
+		HX_PORT |= (1<<HXsck);
+		//сдвигаем значение АЦП влево, теперь значение АЦП выглядит так .......0
+		adc_value <<= 1;
+		//опускаем строб
+		HX_PORT &= ~(1<<HXsck);
+		//проверяем, что на выводе data, если ноль то самый правый символ так и останется ноль .......0
+		//если 1, то самый правый символ будет один .......1
+		if(HX_PIN & (1<<HXdata))
+		{
+			adc_value++;
+		}	
+	}
+
+	//выборки будем брать с канала А, с коэф.усиления 128
+	//поэтому стробируем еще один раз
+	HX_PORT |= (1<<HXsck);
+	HX_PORT &= ~(1<<HXsck);
+
+	//return adc_value;
+}
+
+
 //#define ReportIndex 0
 //#define ReportNumber 1
 //#define Xindex ReportIndex+2
@@ -630,7 +664,7 @@ static void read_joy( void )
 	//report [1] = 0;
 	//report [2] = 0;
 	//calcEncode();
-	
+	Weighing();
 	int8_t dx = encode_read1();
 	//report [0] = dx;
 	if(dx!=0){
@@ -652,9 +686,12 @@ static void read_joy( void )
 	#ifdef USE_YPOS
 	Ypos = 127 - adc;
 
-	report [Yindex] = (int8_t)(Ypos);
+	report [Tindex] = (int8_t)(Ypos);
+
+
+
+	report [Yindex] = (int8_t)(adc_value>>10);
 	#endif
-	
 	// Buttons
 
 	//if ( ! (PINB & 0x01) ) report [2] |= 0x04;
@@ -677,11 +714,104 @@ static void read_joy( void )
 
 
 
+typedef struct {
+
+	usbMsgLen_t (*onGetReport)(uint8_t *buf, char id);
+} Report;
+
+
+
+
+
+
+static  usbMsgLen_t GetJoystickReport(uint8_t *buf, char id){
+		report_out[0] = id;
+		buf = (usbMsgPtr_t) report_out;
+		return sizeof report_out;}
+
+
+
+static  usbMsgLen_t GetPIDReport(uint8_t *buf, char id){
+			ureport[0] = id;
+			ureport[1] = 1;
+			ureport[2] = 1;
+			ureport[3] = 5;
+			ureport[4] = 0;
+buf = (usbMsgPtr_t) ureport;
+return     5;}
+
+
+
+
+
+static Report reports[] = {
+
+{ 		
+		.onGetReport				=	GetJoystickReport
+	},
+{ 		
+		.onGetReport				=	GetPIDReport
+	},	
+
+
+
+};
+
+
+
 
 
 static uchar    idleRate;           /* in 4 ms units */
 char _awaitReport;
+char reportID;
 
+usbMsgLen_t   usbFunctionSetup(uint8_t data[8])
+{
+   usbRequest_t    *rq = (void *)data;
+//   usbMsgPtr = reportBuffer;
+   if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS){    /* class request type */
+      if(rq->bRequest == USBRQ_HID_GET_REPORT){  /* wValue: ReportType (highbyte), ReportID (lowbyte) */
+         
+		  reportID = rq->wValue.bytes[0];
+		  int r = (reportID-1)%2;
+		  Report rr = reports[0];//r
+	  				
+		return rr.onGetReport(usbMsgPtr,reportID);
+         //curGamepad->buildReport(reportBuffer);
+         //return curGamepad->report_size;
+      }else if(rq->bRequest == USBRQ_HID_GET_IDLE){
+         usbMsgPtr = &idleRate;
+         return 1;
+      }else if(rq->bRequest == USBRQ_HID_SET_IDLE){
+         idleRate = rq->wValue.bytes[1];
+      }else if (rq->bRequest == USBRQ_HID_SET_REPORT)
+      {
+	  
+	  
+	  reportID = rq->wValue.bytes[0];
+	  				
+	  idleRate = rq->wValue.bytes[1];
+	  ureport[0] = reportID;
+	  ureport[1] = idleRate;
+	  usbMsgPtr = (usbMsgPtr_t)ureport;
+	  return 3;
+	  
+	  
+	  
+	  
+	  
+         _awaitReport = 1;
+
+		usbMsgPtr = rq->wValue.bytes;
+		return     USB_NO_MSG;
+      }
+   }else{
+   /* no vendor specific requests implemented */
+   }
+   return 0;
+}
+
+/*
 usbMsgLen_t  usbFunctionSetup( uint8_t data [8] )
 {
 
@@ -692,11 +822,11 @@ usbMsgLen_t  usbFunctionSetup( uint8_t data [8] )
 	
 	switch ( rq->bRequest )
 	{
-	case USBRQ_HID_GET_REPORT: // HID joystick only has to handle this
+	case USBRQ_HID_GET_REPORT: // 
 		usbMsgPtr = (usbMsgPtr_t) report_out;
 		return sizeof report_out;
 	
-	case USBRQ_HID_SET_REPORT: // LEDs on joystick?
+	case USBRQ_HID_SET_REPORT: // 
 	
 	 _awaitReport = 1;
 		return USB_NO_MSG;
@@ -708,14 +838,16 @@ usbMsgLen_t  usbFunctionSetup( uint8_t data [8] )
 
 	
 }
+*/
 
 
 uchar   usbFunctionWrite(uchar *data, uchar len)
 {
    if (!_awaitReport || len < 1)
       return 1;
-   if(data[0]<127){MOTORON;MOTORCCW;PWM((data[0]));} ;
-   if(data[0]>127){MOTORON;MOTORCW;PWM(127-(data[0]));} ;
+	  
+   if(data[10]<127){MOTORON;MOTORCCW;PWM((data[0]));} ;
+   if(data[10]>127){MOTORON;MOTORCW;PWM(127-(data[0]));} ;
    _awaitReport = 0;
     return 1;
 }
@@ -723,7 +855,10 @@ uchar   usbFunctionWrite(uchar *data, uchar len)
 
 int main( void )
 {
+	//curGamepad = GetGamepad();
+	HX711_Init();
 	encode_init();
+	
 	startadc(YPIN1);
 	usbInit();
 	sei();
@@ -755,3 +890,5 @@ int main( void )
 	
 	return 0;
 }
+
+
