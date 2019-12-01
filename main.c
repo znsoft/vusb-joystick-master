@@ -608,13 +608,14 @@ int _adc(uchar adctouse)
 
 void HX711_Init(void)
 {   
+
+	
 	//sck выход, data - вход
 	HX_DDR |= (1<<HXsck);
 	HX_DDR &= ~(1<<HXdata);
 	
 	//подт€гиваем data к питанию, на sck устанавливаем лог.единицу
 	HX_PORT |= (1<<HXdata);
-	HX_PORT &= ~(1<<HXsck);
 	HX_PORT &= ~(1<<HXsck);
 }
 
@@ -678,8 +679,8 @@ static void read_joy( void )
 		#endif
 		}
 		#ifdef USE_FORCEFEEDBACK
-		if(Xp<-127){MOTORON;MOTORCW;PWM(-(Xp+127)*48);}
-		if(Xp>127){MOTORON;MOTORCCW;PWM((Xp-127)*48);}
+		if(Xp<-1){MOTORON;MOTORCW;PWM(-(Xp)*2);}
+		if(Xp>1){MOTORON;MOTORCCW;PWM((Xp)*2);}
 		#endif
 			}
 	
@@ -690,7 +691,7 @@ static void read_joy( void )
 
 
 
-	report [Yindex] = (int8_t)(adc_value>>10);
+	report [Yindex] = (int8_t)(adc_value>>1);
 	#endif
 	// Buttons
 
