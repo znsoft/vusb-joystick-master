@@ -774,7 +774,7 @@ usbMsgLen_t   usbFunctionSetup(uint8_t data[8])
       if(rq->bRequest == USBRQ_HID_GET_REPORT){  /* wValue: ReportType (highbyte), ReportID (lowbyte) */
          
 		  reportID = rq->wValue.bytes[0];
-		  int r = (reportID-1)%2;
+		  //int r = (reportID-1)%2;
 		  Report rr = reports[0];//r
 	  				
 		return rr.onGetReport(usbMsgPtr,reportID);
